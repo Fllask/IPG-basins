@@ -1,10 +1,22 @@
-"""Different algorithms related to gradient descent used to optimize the actions on different kind of games
+"""Different algorithms related to gradient descent used to optimize the actions on different kind of games. Only the first one, IPGA_stage_game
+   is used in run.ipynb 
    AUTHORS: Gabriel Vallat
 """
 import torch as th
 import numpy as np
 
 def IPGA_stage_game(game,init_pol, iter=10000,lr=None):
+    """Run Independent policy gradient ascent on the given game with the given initial policy or policies
+
+    Args:
+        game (game_definition.StageGame): The game to solve
+        init_pol (torch.tensor): The initial policy or policies. If batched, the tensor should have a shape of (batch_size, n_players, n_action) 
+        iter (int, optional): maximum number of iteration to run. Defaults to 10000.
+        lr (float, optional): learning rate. Defaults to None. If None, the learning rate is chosen as 1/(game.na*(game.n-1))
+
+    Returns:
+        _type_: _description_
+    """
     pol = th.clone(init_pol)
     flag=False
     pol.requires_grad=True

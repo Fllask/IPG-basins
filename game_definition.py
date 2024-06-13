@@ -6,7 +6,20 @@ import torch as th
 import torch.functional as F
 import numpy as np
 class StageGame():
+    """A stage game with N players and n_a actions
+    """
     def __init__(self,n_players,n_actions,coupling_w = 0, separable_type="additive", seed=None,device="cuda",aligned=True) -> None:
+        """Initialise a stage game
+
+        Args:
+            n_players (int): Number of players
+            n_actions (int): Number of actions for each players
+            coupling_w (float, optional): coupling proportion. Defaults to 0.
+            separable_type (Litteral, optional): Which mode is used to build the separable part of the reward"additive" or "multiplicative". Defaults to "additive".
+            seed (int, optional): Seed of the random generator. Defaults to None.
+            device (str, optional): Device to use. Defaults to "cuda".
+            aligned (bool, optional): Whether both the separable and coupled reward have the same maximum. Defaults to True.
+        """
         self.n = n_players
         self.na = n_actions
         self.seed = seed
@@ -17,34 +30,6 @@ class StageGame():
         assert coupling_w <= 1, "The proportional weight should sum to 1"
 
         self.r = th.zeros([self.na for i in range(self.n)],device=device)
-        """
-        self.r_prod_indiv = th.rand([self.n,self.na],generator=self.gen,device=device)
-        self.r_prod = th.ones([self.na]*self.n,device=device)
-        for i in range(self.n):
-            dim = [1]*i+[self.na]+[1]*(self.n-1-i)
-            self.r_prod*=self.r_prod_indiv[i].reshape(dim)
-        """
-        """    
-        self.r_prod_indiv = th.rand([self.n,self.na,self.na],generator=self.gen,device=device)
-        self.r_prod = self.r_prod_indiv.prod(0)""" 
-        """
-        #normalize the partial reward
-        self.r_prod-=self.r_prod.min()
-        self.r_prod/=self.r_prod.max()
-
-        self.r += self.r_prod*mult_pot_w
-        
-        self.r_add_indiv = th.rand(self.n,self.na,generator=self.gen,device=device)
-        self.r_add = self.r_add_indiv[0].reshape([self.na]+[1]*(self.n-1))
-        for p in range(1,self.n):
-            shape = np.ones(self.n,dtype=int)
-            shape[p]=self.na
-            self.r_add = self.r_add+self.r_add_indiv[p].reshape(tuple(shape))
-        
-        self.r_add = self.r_add
-        self.r_add-=self.r_add.min()
-        self.r_add/=self.r_add.max()
-        self.r+=self.r_add*(1-mult_pot_w)"""
         self.r_sep_indiv = th.rand(self.n,self.na,generator=self.gen,device=device)
         if separable_type == "additive":
             self.r_sep = self.r_sep_indiv[0].reshape([self.na]+[1]*(self.n-1))
@@ -78,6 +63,7 @@ class StageGame():
     def play(self,actions: List[int])->int:
         return self.r[tuple(actions)]
     def solve_stoc_pol(self,stoc_pol):
+        """Compute the expected reward for the given stochastic policy"""
         marginal_reward = self.r
         for p in range(self.n):
             shape = np.ones(self.n-p,dtype=int)
@@ -85,6 +71,7 @@ class StageGame():
             marginal_reward = (stoc_pol[p].reshape(tuple(shape))*marginal_reward).sum(0)
         return marginal_reward
     def solve_stoc_pol_batch(self,stoc_pol):
+        """Compute the expected reward for each of the given stochastic policies"""
         marginal_reward = th.tile(self.r.unsqueeze(0),[stoc_pol.shape[0]]+self.n*[1])
         for p in range(self.n):
             shape = np.ones(1+self.n-p,dtype=int)
@@ -93,7 +80,7 @@ class StageGame():
             marginal_reward = (stoc_pol[:,p].reshape(tuple(shape))*marginal_reward).sum(1)
         return marginal_reward
     def is_nash(self,deterministic_pol):
-        
+        """Check that the deterministic policy given in input is a Nash equilibrium"""
         for p in range(self.n):
             pol_mp = list(deterministic_pol)
             pol_mp[p]=slice(None)
@@ -101,6 +88,7 @@ class StageGame():
                 return False
         return True
     def solve_greedy_pol_batch(self,stoc_pol):
+        """Get the expected reward of the closest deterministic policy"""
         m,greedy_pol = stoc_pol.max(-1)
         greedy_pol_oh = th.nn.functional.one_hot(greedy_pol,num_classes=self.na)
         marginal_reward = th.tile(self.r.unsqueeze(0),[greedy_pol_oh.shape[0]]+self.n*[1])
@@ -110,35 +98,9 @@ class StageGame():
             shape[1] = self.na
             marginal_reward = (greedy_pol_oh[:,p].reshape(tuple(shape))*marginal_reward).sum(1)
         return greedy_pol_oh,marginal_reward
-class AlignedStageGame(StageGame):
-    def __init__(self,n_players,n_actions,mult_pot_w = 0, seed=None,device="cuda"):
-        super.__init__(n_players,n_actions,mult_pot_w, seed,device)
-
-        #overwrite the reward
-        self.r = th.zeros([self.na for i in range(self.n)],device=device)
-        self.r_prod_indiv = th.rand([self.n]+[self.na for i in range(self.n)],generator=self.gen,device=device)
-        self.r_prod = self.r_prod_indiv.prod(0)
-        #normalize the partial reward
-        self.r_prod-=self.r_prod.min()
-        self.r_prod/=self.r_prod.max()
-
-        self.r += self.r_prod*mult_pot_w
-        
-        self.r_add_indiv = th.rand(self.n,self.na,generator=self.gen,device=device)
-        self.r_add = self.r_add_indiv[0].reshape([self.na]+[1]*(self.n-1))
-        for p in range(1,self.n):
-            shape = np.ones(self.n,dtype=int)
-            shape[p]=self.na
-            self.r_add = self.r_add+self.r_add_indiv[p].reshape(tuple(shape))
-        
-        self.r_add = self.r_add
-        self.r_add-=self.r_add.min()
-        self.r_add/=self.r_add.max()
-        self.r+=self.r_add*(1-mult_pot_w)
-        #normalize the total reward:
-        self.r-=self.r.min()
-        self.r/=self.r.max()
 class MultiStageGame():
+    """A multi-stage random game, with ns states, n players and n actions
+    """
     def __init__(self,n_players,n_states,
                  n_actions,
                  mult_r_w=0,
