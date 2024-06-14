@@ -6,7 +6,8 @@ import torch as th
 import numpy as np
 
 def IPGA_stage_game(game,init_pol, iter=10000,lr=None):
-    """Run Independent policy gradient ascent on the given game with the given initial policy or policies
+    """Run Independent policy gradient ascent on the given game with the given
+       initial policy or policies
 
     Args:
         game (game_definition.StageGame): The game to solve
@@ -15,7 +16,7 @@ def IPGA_stage_game(game,init_pol, iter=10000,lr=None):
         lr (float, optional): learning rate. Defaults to None. If None, the learning rate is chosen as 1/(game.na*(game.n-1))
 
     Returns:
-        _type_: _description_
+        torch.tensor: final policy
     """
     pol = th.clone(init_pol)
     flag=False
